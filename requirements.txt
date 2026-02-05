@@ -1,0 +1,14 @@
+# OpenClaw Distributed - Dependencies
+# 
+# NOTE: This implementation uses a pure Python Redis client (redis_client.py)
+# which has NO external dependencies. Python 3.9+ standard library only.
+#
+# The redis_client.py provides sufficient performance for:
+#   - Heartbeat (every 5 seconds)
+#   - State sync (occasional, batched)
+#   - Leader election (rare events)
+#
+# Optional: If you need higher Redis throughput, uncomment:
+# redis>=5.0.0
+#
+# No pip install required for basic operation!
