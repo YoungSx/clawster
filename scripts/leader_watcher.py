@@ -90,7 +90,7 @@ class LeaderWatcher:
         config_paths = [
             Path(__file__).parent.parent / 'config' / 'config.json',
             Path(__file__).parent.parent / 'config.json',
-            Path('/home/shangxin/clawd/clawster/config/config.json'),
+            Path('~/clawd/clawster/config/config.json'),
         ]
         for path in config_paths:
             if path.exists():

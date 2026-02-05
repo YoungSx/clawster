@@ -63,7 +63,7 @@ cron list
 cron add \
   --name "distributed-node-heartbeat" \
   --schedule '{"kind": "every", "everyMs": 10000}' \
-  --system-event "EXEC: /home/shangxin/clawd/clawster/scripts/heartbeat.py" \
+  --system-event "EXEC: ~/clawd/clawster/scripts/heartbeat.py" \
   --agent main
 
 # 验证
@@ -75,7 +75,7 @@ python3 scripts/heartbeat.py
 cron add \
   --name "leader-election" \
   --schedule '{"kind": "every", "everyMs": 10000}' \
-  --system-event "cd /home/shangxin/clawd/clawster && python3 scripts/leader_watcher.py --node-id RouterLadderbot --once" \
+  --system-event "cd ~/clawd/clawster && python3 scripts/leader_watcher.py --node-id RouterLadderbot --once" \
   --agent main
 ```
 
@@ -84,7 +84,7 @@ cron add \
 cron add \
   --name "agent-collaboration-1hao" \
   --schedule '{"kind": "cron", "expr": "*/10 * * * *"}' \
-  --system-event "EXEC: /home/shangxin/clawd/clawster/scripts/agent_collaboration.py --node-id RouterLadderbot --partner sx_squid_bot" \
+  --system-event "EXEC: ~/clawd/clawster/scripts/agent_collaboration.py --node-id RouterLadderbot --partner sx_squid_bot" \
   --agent main
 ```
 

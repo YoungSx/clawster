@@ -3,12 +3,12 @@
 import json
 import time
 import sys
-sys.path.insert(0, '/home/shangxin/clawd/skills/clawster/scripts')
+sys.path.insert(0, '~/clawd/skills/clawster/scripts')
 
 from redis_client import RedisClient
 
 # Load config
-with open('/home/shangxin/clawd/skills/clawster/config.json') as f:
+with open('~/clawd/skills/clawster/config.json') as f:
     config = json.load(f)['cluster']
 
 redis_cfg = config['redis']

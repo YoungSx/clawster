@@ -118,7 +118,7 @@ OpenClaw 内置的 cron 调度系统用于执行分布式节点心跳（推荐�
 # 创建每10秒执行的心跳任务
 openclaw cron add --name "distributed-node-heartbeat" \
   --every 10s \
-  --system-event "EXEC: /home/shangxin/clawd/skills/clawster/scripts/heartbeat.py" \
+  --system-event "EXEC: ~/clawd/skills/clawster/scripts/heartbeat.py" \
   --agent main
 ```
 
@@ -165,7 +165,7 @@ openclaw cron run <job-id>
   "wakeMode": "next-heartbeat",
   "payload": {
     "kind": "systemEvent",
-    "text": "EXEC: /home/shangxin/clawd/skills/clawster/scripts/heartbeat.py"
+    "text": "EXEC: ~/clawd/skills/clawster/scripts/heartbeat.py"
   },
   "state": {
     "nextRunAtMs": 1770029598901,
@@ -199,7 +199,7 @@ openclaw cron run <job-id>
 查看日志：
 ```bash
 # 本地日志
-tail -f /home/shangxin/clawd/skills/clawster/logs/heartbeat.log
+tail -f ~/clawd/skills/clawster/logs/heartbeat.log
 
 # 系统日志（如可用）
 journalctl -t clawster -f

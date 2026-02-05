@@ -35,7 +35,7 @@ def get_config_dir() -> Path:
     
     # 备选路径
     alt_paths = [
-        Path('/home/shangxin/clawd/clawster/config'),
+        Path('~/clawd/clawster/config'),
         Path('/root/clawster/config'),
         Path('/home/node/clawster/config'),
     ]
