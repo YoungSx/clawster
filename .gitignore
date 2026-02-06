@@ -2,6 +2,19 @@
 # Use config.example.json as template (tracked in git), copy to config.json (gitignored)
 config/secrets.json
 config/config.json
+
+# Operational scripts with API keys/secrets - DO NOT COMMIT
+moltbook_bot.py
+interact_with_agents.py
+check_inshells_status.py
+check_redis_inbox.py
+create_optimized_ad.py
+test_inshells_boundaries.py
+moltbook_monitor.sh
+moltbook_comment_*.json
+
+# Backup scripts with R2 credentials
+clawster/scripts/backup_to_r2_rclone.sh
 *.key
 *.pem
 *.der

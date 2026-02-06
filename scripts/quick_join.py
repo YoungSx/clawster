@@ -26,8 +26,8 @@ def main():
     # 2. Redis配置
     print("\n2. Redis连接配置")
     print("   请输入你的Redis连接信息（用于集群通信）")
-    redis_host = input("   Host [默认: redis-11877...cloud.redislabs.com]: ").strip()
-    redis_port = input("   Port [默认: 11877]: ").strip() or "11877"
+    redis_host = input("   Host [从Doppler获取主机]: ").strip()
+    redis_port = input("   Port [默认: 6379]: ").strip() or "6379"
     redis_pass = input("   Password: ").strip()
     
     if not redis_host:
