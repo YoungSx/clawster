@@ -1,8 +1,43 @@
-# Secrets and sensitive configuration
+# Secrets and sensitive configuration - NEVER commit these
+# Use config.example.json as template (tracked in git), copy to config.json (gitignored)
 config/secrets.json
+config/config.json
+
+# Operational scripts with API keys/secrets - DO NOT COMMIT
+moltbook_bot.py
+interact_with_agents.py
+check_inshells_status.py
+check_redis_inbox.py
+create_optimized_ad.py
+test_inshells_boundaries.py
+moltbook_monitor.sh
+moltbook_comment_*.json
+
+# Backup scripts with R2 credentials
+clawster/scripts/backup_to_r2_rclone.sh
 *.key
 *.pem
+*.der
 .env
+.env.*
+secrets/
+
+# Doppler
+.doppler/
+
+# AWS/R2 credentials
+.aws/
+~/.aws/
+aws_credentials*
+r2_config*
+
+# Any file containing hostnames, endpoints, tokens
+# These should always be loaded from environment/Doppler
+*_endpoint*
+*_host*
+*_token*
+*_api_key*
+*bot_id*
 
 # Logs
 logs/*.log

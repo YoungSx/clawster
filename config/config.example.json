@@ -1,0 +1,26 @@
+{
+  "cluster": {
+    "enabled": true,
+    "node_id": "your_node_id",
+    "node_name": "your_node_name",
+    "redis": {
+      "host": "your_redis_host",
+      "port": 6379,
+      "password": "your_redis_password",
+      "db": 0
+    },
+    "heartbeat": {
+      "interval_ms": 5000,
+      "timeout_ms": 15000
+    },
+    "election": {
+      "timeout_ms": 10000,
+      "renewal_interval_ms": 5000,
+      "renew_threshold": 0.83
+    },
+    "sync": {
+      "batch_size": 100,
+      "max_stream_length": 10000
+    }
+  }
+}
