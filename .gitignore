@@ -1,5 +1,7 @@
 # Secrets and sensitive configuration - NEVER commit these
+# Use config.example.json as template (tracked in git), copy to config.json (gitignored)
 config/secrets.json
+config/config.json
 *.key
 *.pem
 *.der
