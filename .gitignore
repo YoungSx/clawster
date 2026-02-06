@@ -1,8 +1,28 @@
-# Secrets and sensitive configuration
+# Secrets and sensitive configuration - NEVER commit these
 config/secrets.json
 *.key
 *.pem
+*.der
 .env
+.env.*
+secrets/
+
+# Doppler
+.doppler/
+
+# AWS/R2 credentials
+.aws/
+~/.aws/
+aws_credentials*
+r2_config*
+
+# Any file containing hostnames, endpoints, tokens
+# These should always be loaded from environment/Doppler
+*_endpoint*
+*_host*
+*_token*
+*_api_key*
+*bot_id*
 
 # Logs
 logs/*.log

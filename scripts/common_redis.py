@@ -1,89 +1,74 @@
+"""
+Redis Client Module for Clawster
+
+Uses redis-py (mature, production-grade) with:
+- Connection pooling (built into redis-py)  
+- Health checking (redis-py health_check_interval)
+- Configuration from environment (standard practice)
+- Retry handling (tenacity - robust retry library)
+"""
+import os
 import redis
-import threading
-from typing import Dict, Any, Optional
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-_redis_connection_pool: Optional[redis.ConnectionPool] = None
-_redis_pool_lock = threading.Lock()
 
-def get_redis_client(**kwargs) -> redis.Redis:
+def get_redis_client() -> redis.Redis:
     """
-    Retrieves a redis-py client instance with connection pooling.
-    This function ensures a single connection pool is created and reused
-    across the application for optimal performance and resource management.
-
-    Args:
-        host (str): Redis host. Defaults to 'localhost'.
-        port (int): Redis port. Defaults to 6379.
-        db (int): Redis database number. Defaults to 0.
-        password (str, optional): Redis password.
-        max_connections (int): Maximum number of connections in the pool. Defaults to 10.
-        decode_responses (bool): Decode Redis responses to Python strings. Defaults to True.
-        # Add other redis.ConnectionPool arguments as needed
-
-    Returns:
-        redis.Redis: A redis-py client instance.
+    Get Redis client using redis-py from_url pattern.
+    Configuration via environment variables (12-factor app standard).
+    Uses redis-py's built-in connection pool (mature, battle-tested).
+    
+    Environment:
+        REDIS_URL: Full URL redis://:password@host:port/db
+        Or: REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB
     """
-    global _redis_connection_pool
+    redis_url = os.getenv('REDIS_URL')
+    
+    if redis_url:
+        # from_url handles pool automatically
+        return redis.from_url(
+            redis_url,
+            decode_responses=True,
+            health_check_interval=30,
+            socket_connect_timeout=5,
+            socket_timeout=5
+        )
+    
+    # Individual env vars (fallback)
+    return redis.Redis(
+        host=os.getenv('REDIS_HOST', 'localhost'),
+        port=int(os.getenv('REDIS_PORT', 6379)),
+        db=int(os.getenv('REDIS_DB', 0)),
+        password=os.getenv('REDIS_PASSWORD'),
+        decode_responses=True,
+        health_check_interval=30,
+        socket_connect_timeout=5,
+        socket_timeout=5
+    )
 
-    # Extract connection pool specific arguments from kwargs
-    pool_kwargs = {
-        'host': kwargs.pop('host', 'localhost'),
-        'port': kwargs.pop('port', 6379),
-        'db': kwargs.pop('db', 0),
-        'password': kwargs.pop('password', None),
-        'max_connections': kwargs.pop('max_connections', 10),
-        # Add other relevant ConnectionPool args here if needed
-    }
 
-    # Redis client specific arguments
-    client_kwargs = {
-        'decode_responses': kwargs.pop('decode_responses', True),
-        **kwargs # Pass any remaining kwargs to the Redis client
-    }
+@retry(
+    retry=retry_if_exception_type((redis.ConnectionError, redis.TimeoutError)),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10)
+)
+def get_redis_client_with_retry() -> redis.Redis:
+    """Get Redis client with tenacity retry (mature library, not custom)."""
+    client = get_redis_client()
+    client.ping()  # Validate immediately
+    return client
 
-    if _redis_connection_pool is None:
-        with _redis_pool_lock:
-            if _redis_connection_pool is None:
-                print(f"Creating new Redis ConnectionPool with config: {pool_kwargs}")
-                _redis_connection_pool = redis.ConnectionPool(**pool_kwargs)
 
-    # Always create a new Redis client instance from the pool for thread safety
-    # The client itself is not thread-safe, but the pool is.
-    return redis.Redis(connection_pool=_redis_connection_pool, **client_kwargs)
+def test_connection():
+    """Simple test - no hardcoded credentials."""
+    try:
+        client = get_redis_client_with_retry()
+        print(f"✅ Redis connected: {client.ping()}")
+        return True
+    except Exception as e:
+        print(f"❌ Redis error: {e}")
+        return False
+
 
 if __name__ == '__main__':
-    # Example usage and testing
-    print("Testing common_redis.py module...")
-
-    # Configure Redis connection (replace with actual config if needed)
-    redis_config = {
-        'host': 'localhost',
-        'port': 6379,
-        'db': 0,
-        'password': None, # Replace with your Redis password if any
-        'max_connections': 5
-    }
-
-    try:
-        # Get client 1
-        client1 = get_redis_client(**redis_config)
-        client1.set('test_key_common_redis', 'test_value_1')
-        print(f"Client 1 set 'test_key_common_redis': {client1.get('test_key_common_redis')}")
-
-        # Get client 2 (should reuse the same pool)
-        client2 = get_redis_client(**redis_config)
-        print(f"Client 2 got 'test_key_common_redis': {client2.get('test_key_common_redis')}")
-
-        # Verify both clients use the same connection pool
-        assert client1.connection_pool is client2.connection_pool
-        print("Both clients use the same connection pool. (Assertion Passed)")
-
-        client1.delete('test_key_common_redis')
-        print("Test key deleted.")
-        print("common_redis.py testing complete.")
-
-    except redis.exceptions.ConnectionError as e:
-        print(f"Could not connect to Redis: {e}")
-        print("Please ensure a Redis server is running at localhost:6379 or update redis_config.")
-    except Exception as e:
-        print(f"An unexpected error occurred during testing: {e}")
+    test_connection()
