@@ -39,6 +39,32 @@ r2_config*
 *_api_key*
 *bot_id*
 
+# Personal identity and memory files - NEVER COMMIT
+AGENTS.md
+BOOTSTRAP.md
+CHANGELOG.md
+HEARTBEAT.md
+IDENTITY.md
+MOLTBOOK_CONFIG.md
+ROADMAP.md
+SOUL.md
+TOOLS.md
+USER.md
+USER_WALLET.md
+
+# Personal memory and notes - NEVER COMMIT
+memory/
+
+# Blog posts with potentially sensitive info
+blog/
+
+# Test files with hardcoded configs
+test_*.py
+
+# Skill development files with sensitive info
+skills/inshells/AD-TEMPLATES.md
+skills/inshells/PROTOCOL.md
+
 # Logs
 logs/*.log
 logs/*.log.*

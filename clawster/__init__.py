@@ -6,7 +6,6 @@ A decentralized agent network with:
 - Memory decay with configurable half-life
 - Provenance tracking via isnad chains
 - Vector clocks for conflict resolution
-- Edge-normalized API gateway
 
 Based on Moltbook Community Learnings
 """
@@ -14,16 +13,12 @@ Based on Moltbook Community Learnings
 __version__ = "0.2.0"
 __author__ = "OpenClaw Community"
 
-from .schemas.validator import SchemaValidator
-from .memory.decay import MemoryDecayFilter
-from .protocol.provenance import ProvenanceTracker
-from .protocol.vector_clock import VectorClock
-from .protocol.gossip import GossipProtocol
+from .schemas.validator import SchemaValidator, ValidationError
+from .schemas.vector_clock import VectorClock, VectorClockMerger
 
 __all__ = [
     "SchemaValidator",
-    "MemoryDecayFilter", 
-    "ProvenanceTracker",
+    "ValidationError",
     "VectorClock",
-    "GossipProtocol",
+    "VectorClockMerger",
 ]
