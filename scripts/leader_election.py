@@ -7,7 +7,7 @@ import json
 import time
 import uuid
 from typing import Optional, Dict, Any, Callable, List
-from redis_client import RedisClient
+from common_redis import get_redis_client
 
 
 class LeaderElection:
@@ -37,7 +37,7 @@ class LeaderElection:
 
     def __init__(self,
                  node_id: Optional[str] = None,
-                 redis_client: Optional[RedisClient] = None,
+                 redis_client: Optional[redis.Redis] = None,
                  redis_config: Optional[Dict[str, Any]] = None,
                  lock_ttl: int = 30,
                  auto_release: bool = True):
@@ -53,8 +53,7 @@ class LeaderElection:
             self.redis = redis_client
             self._owned_client = False
         elif redis_config:
-            self.redis = RedisClient(**redis_config)
-            self.redis.connect()
+            self.redis = get_redis_client(**redis_config)
             self._owned_client = True
         else:
             raise ValueError("必须提供 redis_client 或 redis_config")
@@ -63,7 +62,6 @@ class LeaderElection:
         if self._is_leader and self._auto_release:
             self.release_leadership()
         if hasattr(self, '_owned_client') and self._owned_client:
-            self.redis.close()
 
     def try_acquire_leadership(self) -> bool:
         """尝试获取 Leader 锁: SET key value NX EX ttl"""

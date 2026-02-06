@@ -8,6 +8,7 @@ import json
 import time
 from typing import List, Dict, Any
 import redis
+from redis import exceptions as redis_exceptions
 
 
 class FailoverManager:
@@ -26,18 +27,40 @@ class FailoverManager:
             'reason': reason
         }
         
-        # Add to events stream
-        self.redis.xadd('openclaw:cluster:events', log_entry)
-        
-        # Update node info
-        node_data = self.redis.hget('openclaw:cluster:nodes', node_id)
-        if node_data:
-            node_info = json.loads(node_data)
-            node_info['state'] = 'failed'
-            node_info['failed_at'] = time.time()
-            node_info['fail_reason'] = reason
-            self.redis.hset('openclaw:cluster:nodes', node_id, json.dumps(node_info))
-        
+        try:
+            # Add to events stream
+            self.redis.xadd('openclaw:cluster:events', log_entry)
+        except redis_exceptions.RedisError as e:
+            print(f"[FailoverManager] ERROR: Failed to add node failed event to Redis stream for {node_id}: {e}")
+            return False # Critical failure, cannot mark node failed properly
+
+        try:
+            # Update node info
+            node_data = self.redis.hget('openclaw:cluster:nodes', node_id)
+            if node_data:
+                try:
+                    node_info = json.loads(node_data)
+                except json.JSONDecodeError as e:
+                    print(f"[FailoverManager] WARNING: Failed to decode node data for {node_id}: {e}. Skipping update.")
+                    node_info = {} # Provide a default empty dict to avoid further errors
+
+                node_info['state'] = 'failed'
+                node_info['failed_at'] = time.time()
+                node_info['fail_reason'] = reason
+                self.redis.hset('openclaw:cluster:nodes', node_id, json.dumps(node_info))
+            else:
+                print(f"[FailoverManager] Node {node_id} not found in Redis when marking as failed. Creating new entry.")
+                node_info = {
+                    'node_id': node_id,
+                    'state': 'failed',
+                    'failed_at': time.time(),
+                    'fail_reason': reason
+                }
+                self.redis.hset('openclaw:cluster:nodes', node_id, json.dumps(node_info))
+        except redis_exceptions.RedisError as e:
+            print(f"[FailoverManager] ERROR: Failed to update node info for {node_id} in Redis: {e}")
+            return False # Critical failure
+
         print(f"[FailoverManager] Node {node_id} marked as failed: {reason}")
         
         # Trigger failover actions on sessions, etc.
@@ -57,7 +80,10 @@ class FailoverManager:
             'timestamp': time.time(),
             'action': 'sessions_migrated'
         }
-        self.redis.publish('openclaw:cluster:failover', json.dumps(failover_event))
+        try:
+            self.redis.publish('openclaw:cluster:failover', json.dumps(failover_event))
+        except redis_exceptions.RedisError as e:
+            print(f"[FailoverManager] WARNING: Failed to publish failover event for {failed_node}: {e}")
     
     def _migrate_sessions(self, from_node: str) -> int:
         """Migrate active sessions from failed node"""
@@ -65,16 +91,33 @@ class FailoverManager:
         pattern = f'openclaw:cluster:sessions:*'
         migrated = 0
         
-        for key in self.redis.scan_iter(match=pattern):
-            session_data = self.redis.get(key)
-            if session_data:
-                session = json.loads(session_data)
-                if session.get('node_id') == from_node:
-                    session['node_id'] = 'migrating'
-                    session['migrated_from'] = from_node
-                    session['migrated_at'] = time.time()
-                    self.redis.setex(key, 3600, json.dumps(session))
-                    migrated += 1
+        try:
+            for key in self.redis.scan_iter(match=pattern):
+                try:
+                    session_data = self.redis.get(key)
+                except redis_exceptions.RedisError as e:
+                    print(f"[FailoverManager] WARNING: Failed to get session data for key {key}: {e}")
+                    continue # Skip this session
+
+                if session_data:
+                    try:
+                        session = json.loads(session_data)
+                    except json.JSONDecodeError as e:
+                        print(f"[FailoverManager] WARNING: Failed to decode session data for key {key}: {e}. Skipping migration for this session.")
+                        continue # Skip this session
+
+                    if session.get('node_id') == from_node:
+                        session['node_id'] = 'migrating'
+                        session['migrated_from'] = from_node
+                        session['migrated_at'] = time.time()
+                        try:
+                            self.redis.setex(key, 3600, json.dumps(session))
+                            migrated += 1
+                        except redis_exceptions.RedisError as e:
+                            print(f"[FailoverManager] WARNING: Failed to setex session {key} during migration: {e}")
+
+        except redis_exceptions.RedisError as e:
+            print(f"[FailoverManager] ERROR: Failed to scan Redis for sessions during migration from {from_node}: {e}")
         
         print(f"[FailoverManager] Migrated {migrated} sessions from {from_node}")
         return migrated
