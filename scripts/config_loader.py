@@ -1,18 +1,11 @@
 #!/usr/bin/env python3
 """
-统一配置加载器 - 所有脚本使用 secrets.json
-
-原则:
-1. 统一使用 secrets.json 作为 Redis 配置来源
-2. 环境变量作为备用覆盖
-3. 所有脚本必须导入此模块获取 Redis 配置
-
-使用方式:
-    from config_loader import get_redis_config
-    redis_config = get_redis_config()
-    r = RedisClient(**redis_config)
+OpenClaw Distributed - Secure Config Loader
+重构版：
+1. 优先级：环境变量 > secrets.json > 默认值
+2. 安全性：移除敏感路径自动搜索
+3. 鲁棒性：支持无配置文件纯环境启动
 """
-
 import os
 import json
 from pathlib import Path
@@ -24,119 +17,84 @@ _config_loaded = False
 
 
 def get_config_dir() -> Path:
-    """获取配置目录"""
-    # 优先使用环境变量
+    """获取配置目录（安全版）"""
+    # 1. 优先使用显式环境变量
     if os.getenv('CLAWSTER_CONFIG_DIR'):
         return Path(os.getenv('CLAWSTER_CONFIG_DIR'))
-    
-    # 默认路径
+
+    # 2. 默认项目内路径
     script_dir = Path(__file__).parent
-    config_dir = script_dir.parent / 'config'
-    
-    # 备选路径
-    alt_paths = [
-        Path('~/clawd/clawster/config'),
-        Path('/root/clawster/config'),
-        Path('/home/node/clawster/config'),
-    ]
-    
-    for alt in alt_paths:
-        if alt.exists():
-            return alt
-    
-    return config_dir
-
-
-def get_secrets_path() -> Optional[Path]:
-    """获取 secrets.json 路径"""
-    config_dir = get_config_dir()
-    secrets_path = config_dir / 'secrets.json'
-    
-    if secrets_path.exists():
-        return secrets_path
-    
-    return None
+    return script_dir.parent / 'config'
 
 
 def get_redis_config() -> Dict[str, Any]:
     """
-    获取 Redis 配置（统一使用 secrets.json）
-    
-    Returns:
-        {
-            'host': str,
-            'port': int,
-            'password': str,
-            'db': int
-        }
-    
-    Raises:
-        RuntimeError: secrets.json 不存在或配置不完整
+    获取 Redis 配置（优先级：ENV > secrets.json > Defaults）
     """
     global _config_cache, _config_loaded
-    
-    # 如果已经加载过，直接返回缓存
+
     if _config_loaded and _config_cache is not None:
         return _config_cache
-    
-    secrets_path = get_secrets_path()
-    
-    if not secrets_path:
-        raise RuntimeError(f"secrets.json 不存在！搜索路径: {get_config_dir()}")
-    
-    try:
-        with open(secrets_path, 'r') as f:
-            data = json.load(f)
-            redis_data = data.get('redis', {})
-            
-            # 基础配置
-            redis_config = {
-                'host': redis_data.get('host'),
-                'port': redis_data.get('port', 11877),
-                'password': redis_data.get('password'),
-                'db': redis_data.get('db', 0)
-            }
-            
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"secrets.json 格式错误: {e}")
-    except Exception as e:
-        raise RuntimeError(f"读取 secrets.json 失败: {e}")
-    
-    # 验证必要配置
-    if not all([redis_config['host'], redis_config['password']]):
-        raise RuntimeError("Redis 配置不完整：secrets.json 中缺少 host 或 password")
-    
-    # 环境变量作为可选覆盖（仅在 secrets.json 值无效时使用）
-    if not redis_config['host']:
-        redis_config['host'] = os.getenv('REDIS_HOST')
-    if not redis_config['port']:
-        redis_config['port'] = int(os.getenv('REDIS_PORT', 11877))
-    if not redis_config['password']:
-        redis_config['password'] = os.getenv('REDIS_PASSWORD')
-    if not redis_config.get('db'):
-        redis_config['db'] = int(os.getenv('REDIS_DB', 0))
-    
-    # 确保端口是整数
-    if isinstance(redis_config['port'], str):
-        redis_config['port'] = int(redis_config['port'])
-    
-    # 缓存配置
-    _config_cache = redis_config
+
+    config = {
+        'host': None,
+        'port': 11877,
+        'password': None,
+        'db': 0
+    }
+
+    # --- 1. 尝试从 secrets.json 加载 ---
+    secrets_path = get_config_dir() / 'secrets.json'
+    if secrets_path.exists():
+        try:
+            with open(secrets_path, 'r') as f:
+                data = json.load(f)
+                redis_data = data.get('redis', {})
+                config['host'] = redis_data.get('host')
+                config['port'] = redis_data.get('port', config['port'])
+                config['password'] = redis_data.get('password')
+                config['db'] = redis_data.get('db', config['db'])
+        except Exception as e:
+            print(f"⚠️ 读取 secrets.json 失败: {e}")
+
+    # --- 2. 环境变量覆盖 (最高优先级) ---
+    env_host = os.getenv('REDIS_HOST')
+    if env_host: config['host'] = env_host
+
+    env_port = os.getenv('REDIS_PORT')
+    if env_port: config['port'] = int(env_port)
+
+    env_pass = os.getenv('REDIS_PASSWORD')
+    if env_pass: config['password'] = env_pass
+
+    env_db = os.getenv('REDIS_DB')
+    if env_db: config['db'] = int(env_db)
+
+    # --- 3. 验证必要配置 ---
+    if not config['host'] or not config['password']:
+        raise RuntimeError(
+            f"Redis 配置不完整！缺失 host 或 password。\n"
+            f"检测路径: {secrets_path}\n"
+            f"当前配置: host={config['host']}, port={config['port']}, db={config['db']}"
+        )
+
+    # 强制端口为整数
+    config['port'] = int(config['port'])
+
+    _config_cache = config
     _config_loaded = True
-    
-    return redis_config
+    return config
 
 
 def get_node_config() -> Dict[str, Any]:
     """获取节点配置"""
-    config_dir = get_config_dir()
-    config_path = config_dir / 'config.json'
-    
+    config_path = get_config_dir() / 'config.json'
     if config_path.exists():
-        with open(config_path, 'r') as f:
-            return json.load(f)
-    
-    # 默认配置
+        try:
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        except: pass
+
     return {
         'node': {
             'id': os.getenv('OPENCLAW_NODE_ID', ''),
@@ -146,45 +104,18 @@ def get_node_config() -> Dict[str, Any]:
             'retry_delay': 1,
             'leader_ttl': 60
         },
-        'logging': {
-            'level': 'INFO'
-        }
+        'logging': {'level': 'INFO'}
     }
 
-
-def validate_node_config(config: Dict[str, Any]) -> Dict[str, Any]:
-    """校验并修复节点配置"""
-    node_id = config.get('node', {}).get('id', '').strip()
-    if not node_id:
-        # 1. 尝试从环境变量获取
-        node_id = os.getenv('OPENCLAW_NODE_ID', '').strip()
-        if node_id:
-            config['node']['id'] = node_id
-        else:
-            # 2. 自动生成唯一 ID
-            import uuid
-            node_id = f"node-{uuid.uuid4().hex[:8]}"
-            config['node']['id'] = node_id
-        print(f"⚠️ node.id 为空，已自动设置: {node_id}")
-    return config
-
-
 def reload_config():
-    """强制重新加载配置"""
     global _config_cache, _config_loaded
     _config_cache = None
     _config_loaded = False
     return get_redis_config()
 
-
 if __name__ == '__main__':
-    # 测试配置加载
     try:
-        config = get_redis_config()
-        print("✅ Redis 配置加载成功:")
-        print(f"  host: {config['host']}")
-        print(f"  port: {config['port']}")
-        print(f"  db: {config['db']}")
-        print(f"  password: {'*' * len(config['password'])}")
+        cfg = get_redis_config()
+        print(f"✅ 配置加载成功: {cfg['host']}:{cfg['port']} (DB: {cfg['db']})")
     except Exception as e:
-        print(f"❌ 配置加载失败: {e}")
+        print(f"❌ 配置失败: {e}")

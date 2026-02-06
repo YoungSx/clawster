@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-OpenClaw Distributed - Fixed Redis Client
-修复版：移除 or 'OK' 虚假成功问题，添加写入验证
+OpenClaw Distributed - Unified Redis Client
+整合版：支持原子操作、Lua 脚本及稳健的错误处理
 """
 import socket
 from typing import Optional, Dict, List, Any, Union
@@ -48,7 +48,8 @@ class RedisClient:
     def _encode(self, parts: List[str]) -> bytes:
         resp = [f'*{len(parts)}\r\n']
         for p in parts:
-            resp.append(f'${len(p)}\r\n{p}\r\n')
+            p_str = str(p)
+            resp.append(f'${len(p_str.encode())}\r\n{p_str}\r\n')
         return ''.join(resp).encode()
 
     def _read(self) -> Any:
@@ -72,7 +73,6 @@ class RedisClient:
             length = int(data)
             if length < 0:
                 return None
-            # Read the bulk string + trailing \r\n
             while len(self._buffer) < length + 2:
                 chunk = self._sock.recv(4096)
                 if not chunk:
@@ -83,115 +83,61 @@ class RedisClient:
             return result.decode() if self.decode_responses else result
         elif prefix == b'*':
             count = int(data)
+            if count < 0:
+                return None
             return [self._read() for _ in range(count)]
         return None
 
-    def _cmd(self, parts: List[str]) -> Any:
+    def _cmd(self, parts: List[Any]) -> Any:
         if not self._sock:
             self.connect()
-        self._sock.sendall(self._encode(parts))
+        self._sock.sendall(self._encode([str(p) for p in parts]))
         return self._read()
 
-    # String commands - 修复：移除 or 'OK'，真实返回结果
-    def setex(self, key: str, seconds: int, value: str) -> str:
-        result = self._cmd(['SETEX', key, str(seconds), value])
-        # 明确检查返回结果
-        if result != 'OK':
-            raise Exception(f'SETEX failed: expected OK, got {result}')
-        return result
+    # --- Lua Scripting ---
+    def eval(self, script: str, numkeys: int, *keys_and_args: Any) -> Any:
+        """Execute Lua script: EVAL script numkeys key1 key2 ... arg1 arg2 ..."""
+        return self._cmd(['EVAL', script, str(numkeys)] + list(keys_and_args))
 
+    # --- String commands ---
     def get(self, key: str) -> Optional[str]:
         return self._cmd(['GET', key])
 
     def set(self, key: str, value: str, nx: bool = False, xx: bool = False,
             ex: Optional[int] = None, px: Optional[int] = None) -> Optional[str]:
-        """SET key value [NX] [XX] [EX seconds] [PX milliseconds]
-        - NX: only set if key doesn't exist
-        - XX: only set if key exists
-        - EX: expire time in seconds
-        - PX: expire time in milliseconds
-        Returns: "OK" on success, None if NX/XX condition not met
-        """
         cmd = ['SET', key, value]
-        if nx:
-            cmd.append('NX')
-        if xx:
-            cmd.append('XX')
-        if ex is not None:
-            cmd.extend(['EX', str(ex)])
-        if px is not None:
-            cmd.extend(['PX', str(px)])
-        result = self._cmd(cmd)
-        return result
+        if nx: cmd.append('NX')
+        if xx: cmd.append('XX')
+        if ex is not None: cmd.extend(['EX', str(ex)])
+        if px is not None: cmd.extend(['PX', str(px)])
+        return self._cmd(cmd)
 
-    def delete(self, key: str) -> int:
-        """Delete a key, returns number of keys deleted"""
-        result = self._cmd(['DEL', key])
-        if result is None:
-            raise Exception(f'DELETE failed: got None')
-        return result
+    def delete(self, *keys: str) -> int:
+        result = self._cmd(['DEL'] + list(keys))
+        return result if result is not None else 0
 
-    # Hash commands - 同样修复
+    def ttl(self, key: str) -> int:
+        result = self._cmd(['TTL', key])
+        return result if result is not None else -2
+
+    # --- Hash commands ---
     def hset(self, key: str, field: str, value: str) -> int:
-        result = self._cmd(['HSET', key, field, value])
-        if result is None:
-            raise Exception(f'HSET failed: got None')
-        return result
+        return self._cmd(['HSET', key, field, value])
 
     def hget(self, key: str, field: str) -> Optional[str]:
         return self._cmd(['HGET', key, field])
 
     def hgetall(self, key: str) -> Dict[str, str]:
         result = self._cmd(['HGETALL', key])
-        if not result:
-            return {}
-        if isinstance(result, list) and len(result) % 2 == 0:
-            return {result[i]: result[i+1] for i in range(0, len(result), 2)}
-        raise Exception(f'HGETALL returned unexpected format: {result}')
+        if not result: return {}
+        return {result[i]: result[i+1] for i in range(0, len(result), 2)}
 
-    def hdel(self, key: str, *fields: str) -> int:
-        result = self._cmd(['HDEL', key] + list(fields))
-        if result is None:
-            raise Exception(f'HDEL failed: got None')
-        return result
-
-    # Key commands
-    def keys(self, pattern: str = '*') -> List[str]:
-        """Find all keys matching the given pattern"""
-        result = self._cmd(['KEYS', pattern])
-        return result if result is not None else []
-
-    def ttl(self, key: str) -> int:
-        """Get remaining TTL of a key in seconds"""
-        result = self._cmd(['TTL', key])
-        return result if result is not None else -2
-
-    def exists(self, key: str) -> int:
-        """Check if key exists (1 if exists, 0 if not)"""
-        result = self._cmd(['EXISTS', key])
-        return result if result is not None else 0
-
-    # List commands
+    # --- List commands ---
     def lpush(self, key: str, *values: str) -> int:
-        """Push values to the left of a list"""
         return self._cmd(['LPUSH', key] + list(values))
 
-    def lrange(self, key: str, start: int, stop: int) -> List[str]:
-        """Get a range of elements from a list"""
-        result = self._cmd(['LRANGE', key, str(start), str(stop)])
-        return result if result else []
-
-    def llen(self, key: str) -> int:
-        """Get the length of a list"""
-        result = self._cmd(['LLEN', key])
-        return result if result is not None else 0
-
     def ltrim(self, key: str, start: int, stop: int) -> str:
-        """Trim a list to the specified range"""
         return self._cmd(['LTRIM', key, str(start), str(stop)])
 
-    # Pub/Sub
     def publish(self, channel: str, message: str) -> int:
-        """Publish a message to a channel"""
-        result = self._cmd(['PUBLISH', channel, message])
-        return result if result is not None else 0
+        return self._cmd(['PUBLISH', channel, message])
