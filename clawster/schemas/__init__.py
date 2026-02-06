@@ -1,12 +1,31 @@
-"""JSON Schema validation for Clawster node outputs."""
+"""Schema validation and definitions for Clawster."""
 
-from .validator import SchemaValidator, ValidationError
-from .definitions import NODE_OUTPUT_SCHEMA, HEARTBEAT_SCHEMA, MEMORY_ENTRY_SCHEMA
+from .definitions import (
+    NODE_OUTPUT_SCHEMA,
+    HEARTBEAT_SCHEMA,
+    MEMORY_ENTRY_SCHEMA,
+)
+
+from .validator import (
+    SchemaValidator,
+    ValidationError,
+    validate_node_output,
+    get_validator,
+)
+
+from .vector_clock import (
+    VectorClock,
+    VectorClockMerger,
+)
 
 __all__ = [
-    "SchemaValidator",
-    "ValidationError",
-    "NODE_OUTPUT_SCHEMA",
-    "HEARTBEAT_SCHEMA", 
-    "MEMORY_ENTRY_SCHEMA",
+    'NODE_OUTPUT_SCHEMA',
+    'HEARTBEAT_SCHEMA',
+    'MEMORY_ENTRY_SCHEMA',
+    'SchemaValidator',
+    'ValidationError',
+    'validate_node_output',
+    'get_validator',
+    'VectorClock',
+    'VectorClockMerger',
 ]
