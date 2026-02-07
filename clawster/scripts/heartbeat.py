@@ -9,14 +9,15 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-# Load from .env if exists (gitignored)
-ENV_FILE = Path('/home/shangxin/clawd/.env')
+# Load from .secrets/config.env (gitignored)
+ENV_FILE = Path('/home/shangxin/clawd/.secrets/config.env')
 if ENV_FILE.exists():
     with open(ENV_FILE) as f:
         for line in f:
             if '=' in line and not line.startswith('#'):
                 key, val = line.strip().split('=', 1)
                 os.environ[key] = val
+        print(f"Loaded env from {ENV_FILE}", file=sys.stderr)
 
 def send_heartbeat(node_id='RouterLadderbot', ttl=30):
     try:
